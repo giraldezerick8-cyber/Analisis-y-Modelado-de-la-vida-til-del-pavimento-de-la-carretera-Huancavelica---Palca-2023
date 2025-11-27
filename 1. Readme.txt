@@ -1,0 +1,127 @@
+================================================================================
+# README - PIPELINE MAESTRO COMPLETO
+## INTEGRACIÓN, IGC Y MODELADO DE VIDA ÚTIL HDM-4 (MTC V5.2 - COMPARATIVO)
+## TRAMO HUANCAVELICA - PALCA (PE-26)
+================================================================================
+
+Este script Python (**pipeline_maestro.py**) es una herramienta de análisis que integra la condición superficial (PCI), la rugosidad (IRI), y las cargas de tráfico (ESALs) con parámetros de diseño estructural y ambiental (Módulos de Resiliencia, Temperatura, Coeficientes HDM-4) para:
+1.  Determinar el estado actual del pavimento (PCI, IRI).
+2.  Establecer la correlación estadística entre PCI e IRI.
+3.  Proyectar la carga de Ejes Equivalentes Acumulados (ESAL_N).
+4.  Calcular el **Índice de Condición Global (IGC)**.
+5.  Modelar y proyectar la **Vida Útil de Diseño** del pavimento flexible mediante los métodos **HDM-4** (tradicional y calibrado) y generar las curvas de deterioro.
+Nota: Para poder leer bien el readme, es mejor ponerlo en pantalla completa.
+
+--------------------------------------------------------------------------------
+## 1. ESTRUCTURA DEL PROYECTO
+--------------------------------------------------------------------------------
+
+/Tesis_Modelado_Pavimento/
+├── README.txt
+├── pipeline_maestro.py     (Script principal de ejecución)
+└── /DATA_INPUT/            (Archivos de entrada requeridos)
+    ├── 01_PCI_Fallas_Crudo.xlsx
+    ├── 02_IRI_Recorridos_R*.xlsx
+    ├── 03_ Climatología.xlsx
+    └── 05_FEA_Factor_Camion.xlsx
+
+### 1.2 Requisitos y Dependencias
+
+El script requiere **Python 3.x** y las siguientes librerías científicas y de manipulación de datos.
+
+### Instalación de Librerías
+
+Ejecute el siguiente comando en su terminal:
+
+```bash
+pip install pandas numpy openpyxl matplotlib scipy statsmodels
+
+Nota: La librería tkinter (utilizada para los diálogos interactivos) es necesaria para la interfaz de usuario.
+
+--------------------------------------------------------------------------------
+## 2. GUÍA DE USO: EJECUCIÓN DEL PROGRAMA
+--------------------------------------------------------------------------------
+
+El pipeline_maestro.py opera en modo interactivo. Al iniciar el script, se abrirán ventanas de diálogo (pop-ups) que guiarán al usuario a través de la selección de archivos y la entrada de todos los parámetros de diseño necesarios.
+
+2.1 Comando de Ejecución
+Para iniciar el programa, ejecute el siguiente comando en la terminal o Símbolo del Sistema dentro del directorio raíz del proyecto:
+python pipeline_maestro.py
+
+2.2 Secuencia Detallada de Ingreso de Parámetros
+El programa solicitará archivos de entrada (Excel/CSV) y 12 parámetros numéricos críticos, agrupados por fase:
+ 
+    Fase                             Parámetro Solicitado                      Tipo                                  Descripción
+I.  PCI/IRI,               Archivos de Fallas PCI y N Recorridos IRI          Archivos                 Datos de condición superficial.
+II. Tráfico/Carga               1. IMDMAˊX​ Base (veh/día)                     Float                    Tráfico en el inicio del tramo (Punto A).
+                                2. Tasa de Atenuación (%)                     Float                    Reducción lineal del tráfico hacia el final del tramo (Punto B).
+                                3. Archivo Factor Camión (FC/FEA)             Archivo                  Factor de Ejes Equivalentes por tipo de vehículo.
+III.Proyección                  4. Año del Estudio de Tráfico                 Entero                   Año de la toma de datos de IMDAbase​.
+                                5. Año Base de Modelado                       Entero                   Año de inicio de la proyección de EALN​.
+                                6. Tasa de Crecimiento Anual (r) (%)          Float                    Tasa compuesta anual para proyectar el IMDA.
+                                7. Factor Estacional (Fe​)                     Float                    Factor de ajuste por estacionalidad del tráfico.
+                                8. Vida Útil de Diseño (L) (años)             Entero                   Periodo de proyección de la carga acumulada.
+IV. Diseño/Estructura,          9. Carriles en Dirección de Diseño            Entero                   "Número de carriles en la dirección crítica (e.g., 1 o 2)."
+V.  GEOLOGÍA/SUBRASANTE         10. Módulo de Resiliencia (MR​) (MPa)          Float                    Parámetro GEOLÓGICO/ESTRUCTURAL. Resistencia de la subrasante. Se utiliza para modelar la capacidad estructural contra la fatiga y el ahuellamiento en HDM-4.
+VI. CLIMA                       11. Temperatura Media Anual (Tavg​) (°C)       Float                    Parámetro CLIMÁTICO. Afecta directamente la rigidez del ligante asfáltico y la predicción de ahuellamiento en los modelos HDM-4.
+                                12. Factor de Humedad                         Float                    Ajuste del modelo por la exposición a la saturación (si aplica).
+VII. MODELO HDM-4               13. Coeficiente de Calibración Kc​              Float                   MODELADO. Coeficiente local para la función de deterioro de HDM-4. Use Kc​=1.0 para el modelo HDM-4 TRADICIONAL.
+
+--------------------------------------------------------------------------------
+## 3. METODOLOGÍA DETALLADA Y FLUJO DE TRABAJO INTERNO
+--------------------------------------------------------------------------------
+
+El script (pipeline_maestro.py) procesa los datos en 5 fases secuenciales, donde cada fase es insumo de la siguiente:
+
+FASE 1: Cálculo del PCI (ASTM D6433)
+- Lógica Principal: El código utiliza las funciones get_dv_for_distress y compute_cdv_from_tdv_q para interpolar el Valor de Deducibilidad (DV) a partir de la Densidad (%) y las curvas estándar (DV_CURVES) (L, M, H) para cada tipo de falla.
+- Fórmula Final: Para cada unidad de muestreo, el PCI se calcula como: PCI=100-DV
+
+FASE 2: Procesamiento y Promediado del IRI
+- Lógica Principal: La función aggregate_iri_by_segment estandariza las unidades y calcula el promedio del IRI por cada segmento para cada recorrido.
+- Consolidación: Se realiza un merge outer de todos los recorridos cargados.
+- Resultado: Se calcula el IRI Promedio Total y la Desviación Estándar por segmento, asegurando la robustez de la medición.
+
+FASE 3: Correlación Estadística (PCI vs IRI)
+- Integración: Los resultados de PCI e IRI.
+- Análisis:
+	. Pearson (r): Coeficiente de correlación para medir la fuerza de la relación lineal..
+	. Regresión Lineal (OLS): Se ajusta la línea PCI = Pendiente*IRI} + Intercepto y se calcula el R^2 (Coeficiente de Determinación) para validar la relación estadística.
+- Salida: Gráfico de dispersión con la línea de regresión y una tabla de resumen estadístico.
+
+FASE 4: Cálculo de ESALs Acumulados (ESAL):
+- Cálculo del FC: FC = sum (Porcentaje_i * FEA_i, se obtiene del archivo de clasificación vehicular.
+- Interpolación del IMDA (Atenuación): El IMDA se interpola linealmente para cada progresiva (K) del segmento, entre el IMDA_máx (Punto A) y el IMDA_mín (Punto B).
+
+			ESAL_N=365 x IMDA_base x FC x Fe x FDC X [((1+r)^L-1)/r]
+	El FDC (Factor de Distribución por Carril) se ajusta automáticamente según la entrada de 'Carriles en Dirección de Diseño'.
+
+FASE 5: Modelado de Deterioro HDM-4 y Cálculo del IGC
+
+Esta es la fase crítica donde se integran los parámetros ambientales y estructurales para simular la proyección de deterioro (IRI, Fisuración, Ahuellamiento) a lo largo del periodo L.
+
+
+Parámetro Clave                                    Rol en el Modelado HDM-4
+MR​ (Geología)           "Estructural/Fatiga: Se utiliza para estimar la capacidad estructural del pavimento, afectando directamente los parámetros de deformación de la base y subrasante. Un MR​ bajo acelera la fatiga y la progresión del ahuellamiento por deformación permanente."
+Tavg​ (Clima)            "Ahuellamiento/Viscosidad: La temperatura media anual es un factor directo en la ecuación de ahuellamiento de HDM-4. Una Tavg​ más alta reduce la rigidez del asfalto (módulo de elasticidad), incrementando la velocidad de progresión del ahuellamiento por flujo plástico."
+Kc​ (Modelo)             "Calibración: Coeficiente que multiplica el término basal de las funciones de deterioro (e.g., incremento de IRI, de fisuración) para ajustar la sensibilidad del modelo HDM-4 a las condiciones de Huancavelica - Palca."
+
+- Cálculo del IGC: Se calcula el Índice de Condición Global para el estado inicial, ponderando los índices obtenidos y la carga acumulada:
+- Proyección HDM-4: El código itera año por año, proyectando el deterioro (IRI, fisuración) en función del ESAL proyectado para ese año, ajustando las tasas con M_R, T_avg y K_c.
+
+
+--------------------------------------------------------------------------------
+## 4. METODOLOGÍA DETALLADA Y FLUJO DE TRABAJO INTERNO
+--------------------------------------------------------------------------------
+El pipeline genera una carpeta de resultados (/Results/) con la siguiente trazabilidad:
+
+Carpeta de Salida                                        Archivo de Salida                             Contenido
+*/PCI_Results/                                     Resultados_PCI_ASTMD6433_*.xlsx         "Resumen del PCI por unidad, con TDV y CDV."
+                                                   plots_pci/ocurrencias_fallas.png         Gráfico de barras de las fallas más comunes.
+*/IRI_Results/                                     Resultados_IRI_Nrecorridos_merged.xlsx   Datos consolidados del IRI Promedio y Desviación Estándar.
+                                                   plots_iri/G1_IRI_comparativo_*.png       Gráfico de líneas de los recorridos IRI vs. Promedio.
+*/Results/                                         Resultados_Integrados_PCI_IRI_*.xlsx     Matriz de datos de PCI e IRI consolidados.
+*/Correlation_Results/                             Resumen_Estadistico_PCI_IRI.xlsx         "Coeficientes r (Pearson), R2 y Ecuación de Regresión."
+                                                   Correlacion_PCI_vs_IRI_Regresion.png     Gráfico de Dispersión con la Línea de Regresión.
+*/ESALs_Results/                                   Resultados_ESALs_Acumulados_*.xlsx       IMDA interpolado por progresiva y EALN​ acumulado a L años.
+*/HDM4_Results/,Resultado_Modelado_IGC_HDM4_*.xlsx "Tabla de proyección de vida útil        cálculo del IGC y comparación del deterioro IRI/PCI según modelos HDM-4."
